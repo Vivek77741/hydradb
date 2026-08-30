@@ -736,18 +736,17 @@ mod tests {
 
     #[test]
     fn read_auth_token_names_path_on_missing_file() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let missing_path = temp_dir.path().join("missing-auth-token");
+        let path_str = missing_path.to_string_lossy().to_string();
         let values = BTreeMap::from([
             ("GRAPH_ALLOW_PLAINTEXT".to_string(), "true".to_string()),
-            (
-                "GRAPH_AUTH_TOKEN_FILE".to_string(),
-                "/tmp/nonexistent-auth-token-path".to_string(),
-            ),
+            ("GRAPH_AUTH_TOKEN_FILE".to_string(), path_str.clone()),
         ]);
         let config = RuntimeConfig::from_values(values).unwrap();
         let error = config.read_auth_token().unwrap_err().to_string();
         assert!(
-            error.contains("could not read auth token file")
-                && error.contains("/tmp/nonexistent-auth-token-path"),
+            error.contains("could not read auth token file") && error.contains(&path_str),
             "expected error to contain attempted path, got: {error}"
         );
     }
