@@ -317,7 +317,16 @@ impl RuntimeConfig {
     }
 
     pub fn read_auth_token(&self) -> ConfigResult<String> {
-        let token = std::fs::read_to_string(&self.auth_token_file)?
+        let token = std::fs::read_to_string(&self.auth_token_file)
+            .map_err(|error| {
+                Error::new(
+                    error.kind(),
+                    format!(
+                        "could not read auth token file {}: {error}",
+                        self.auth_token_file.display()
+                    ),
+                )
+            })?
             .trim()
             .to_string();
         if token.len() < 32 || token.eq_ignore_ascii_case("change-me") {
@@ -723,5 +732,23 @@ mod tests {
         assert_eq!(memory.max_relationship_rows_bytes, 0);
         assert_eq!(memory.max_source_relationship_rows_bytes, 0);
         assert_eq!(memory.max_relationship_property_rows_bytes, 0);
+    }
+
+    #[test]
+    fn read_auth_token_names_path_on_missing_file() {
+        let values = BTreeMap::from([
+            ("GRAPH_ALLOW_PLAINTEXT".to_string(), "true".to_string()),
+            (
+                "GRAPH_AUTH_TOKEN_FILE".to_string(),
+                "/tmp/nonexistent-auth-token-path".to_string(),
+            ),
+        ]);
+        let config = RuntimeConfig::from_values(values).unwrap();
+        let error = config.read_auth_token().unwrap_err().to_string();
+        assert!(
+            error.contains("could not read auth token file")
+                && error.contains("/tmp/nonexistent-auth-token-path"),
+            "expected error to contain attempted path, got: {error}"
+        );
     }
 }
