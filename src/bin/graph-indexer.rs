@@ -2013,6 +2013,7 @@ impl IndexerAdminServer {
         let listener = TcpListener::bind(addr).await?;
         let router = Router::new()
             .route("/livez", get(|| async { StatusCode::OK }))
+            .route("/healthz", get(|| async { StatusCode::OK }))
             .route("/readyz", get(indexer_readiness))
             .route("/metrics", get(indexer_metrics))
             .with_state(metrics);

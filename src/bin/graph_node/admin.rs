@@ -597,6 +597,7 @@ impl AdminServer {
     fn serve(listener: TcpListener, local_addr: SocketAddr, state: AdminState) -> Result<Self> {
         let router = Router::new()
             .route("/livez", get(live))
+            .route("/healthz", get(live))
             .route("/readyz", get(readiness))
             .route("/metrics", get(metrics))
             .with_state(state);
@@ -1476,5 +1477,10 @@ mod tests {
                 "{name} is a new series carrying an unbounded scope label"
             );
         }
+    }
+
+    #[tokio::test]
+    async fn live_and_healthz_return_ok() {
+        assert_eq!(live().await, StatusCode::OK);
     }
 }
