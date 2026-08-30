@@ -8232,6 +8232,18 @@ fn eval_row_expression(row: &BindingRow, expression: &RowExpression) -> Result<R
             })
         }
         RowExpression::Literal(value) => Ok(RowScalarValue::Value(value.clone())),
+        RowExpression::ToLower(inner) => match eval_row_expression(row, inner)? {
+            RowScalarValue::Value(VertexPropertyValue::String(s)) => {
+                Ok(RowScalarValue::Value(VertexPropertyValue::String(s.to_lowercase())))
+            }
+            RowScalarValue::Value(_) | RowScalarValue::Missing => Ok(RowScalarValue::Missing),
+        },
+        RowExpression::ToUpper(inner) => match eval_row_expression(row, inner)? {
+            RowScalarValue::Value(VertexPropertyValue::String(s)) => {
+                Ok(RowScalarValue::Value(VertexPropertyValue::String(s.to_uppercase())))
+            }
+            RowScalarValue::Value(_) | RowScalarValue::Missing => Ok(RowScalarValue::Missing),
+        },
     }
 }
 
@@ -8767,6 +8779,18 @@ fn expression_query_value(
             binding_property(row, binding, property)?.map(QueryValue::Property)
         }
         RowExpression::Literal(value) => Some(QueryValue::Property(value.clone())),
+        RowExpression::ToLower(inner) => match expression_query_value(row, inner)? {
+            Some(QueryValue::Property(VertexPropertyValue::String(s))) => {
+                Some(QueryValue::Property(VertexPropertyValue::String(s.to_lowercase())))
+            }
+            _ => None,
+        },
+        RowExpression::ToUpper(inner) => match expression_query_value(row, inner)? {
+            Some(QueryValue::Property(VertexPropertyValue::String(s))) => {
+                Some(QueryValue::Property(VertexPropertyValue::String(s.to_uppercase())))
+            }
+            _ => None,
+        },
     })
 }
 
