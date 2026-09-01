@@ -827,6 +827,7 @@ fn ensure_query_nesting_depth(query: &str) -> Result<()> {
     let mut depth = 0_usize;
     let mut in_single_quote = false;
     let mut in_double_quote = false;
+    let mut in_backtick = false;
     let mut in_line_comment = false;
     let mut in_block_comment = false;
     let mut chars = query.chars().peekable();
@@ -861,6 +862,18 @@ fn ensure_query_nesting_depth(query: &str) -> Result<()> {
             }
             continue;
         }
+        if in_backtick {
+            if ch == '\\' {
+                chars.next();
+            } else if ch == '`' {
+                if chars.peek() == Some(&'`') {
+                    chars.next();
+                } else {
+                    in_backtick = false;
+                }
+            }
+            continue;
+        }
 
         if ch == '/' {
             if chars.peek() == Some(&'/') {
@@ -878,6 +891,8 @@ fn ensure_query_nesting_depth(query: &str) -> Result<()> {
             in_single_quote = true;
         } else if ch == '"' {
             in_double_quote = true;
+        } else if ch == '`' {
+            in_backtick = true;
         } else if matches!(ch, '(' | '[' | '{') {
             depth = depth.saturating_add(1);
             if depth > MAX_QUERY_NESTING_DEPTH {
@@ -4685,9 +4700,9 @@ mod tests {
         assert!(matches!(error, GraphError::QueryParse { .. }));
         assert!(error.to_string().contains("nesting depth limit"));
 
-        // Parentheses inside string literals and comments do not count towards nesting depth
+        // Parentheses, brackets, and braces inside string literals, comments, and backtick identifiers do not count towards nesting depth
         let literal_parens = "(".repeat(100);
-        let safe_query = format!("MATCH (n) WHERE n.name = '{literal_parens}' /* {literal_parens} */ RETURN n");
+        let safe_query = format!("MATCH (`n({literal_parens})`) WHERE `n({literal_parens})`.name = '{literal_parens}' /* {literal_parens} */ RETURN `n({literal_parens})`");
         assert!(parse_opencypher_row_query(&safe_query).is_ok());
     }
 }
