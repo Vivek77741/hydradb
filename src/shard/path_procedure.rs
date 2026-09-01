@@ -1256,7 +1256,8 @@ fn enumerate_unweighted_candidate_paths(
     let mut minimum_depth = None;
     while let Some((nodes, edges)) = queue.pop_front() {
         budget.check("native_path_breadth_first")?;
-        if minimum_depth.is_some_and(|depth| edges.len() >= depth)
+        if (procedure.kind == NativePathProcedureKind::SinglePair
+            && minimum_depth.is_some_and(|depth| edges.len() >= depth))
             || edges.len() >= usize::from(procedure.max_len)
         {
             continue;
@@ -1289,12 +1290,13 @@ fn enumerate_unweighted_candidate_paths(
                     cost: 0.0,
                 });
                 if procedure.path_count > 0
+                    && procedure.kind == NativePathProcedureKind::SinglePair
                     && candidates.len()
                         >= usize::try_from(procedure.path_count).unwrap_or(usize::MAX)
                 {
                     return Ok(candidates);
                 }
-                if procedure.path_count == 0 {
+                if procedure.path_count == 0 && procedure.kind == NativePathProcedureKind::SinglePair {
                     minimum_depth.get_or_insert(next_edges.len());
                 }
             }
@@ -1492,6 +1494,33 @@ fn select_native_paths(procedure: &NativePathProcedure, candidates: &mut Vec<Can
     if procedure.fair_relationship_variants {
         return;
     }
+    if procedure.kind == NativePathProcedureKind::SingleSource {
+        let mut grouped: BTreeMap<VertexId, Vec<CandidatePath>> = BTreeMap::new();
+        for candidate in candidates.drain(..) {
+            if let Some(dst) = candidate.nodes.last().copied() {
+                grouped.entry(dst).or_default().push(candidate);
+            }
+        }
+        for (_, group) in &mut grouped {
+            if procedure.path_count == 0 {
+                if let Some(weight) = group.first().map(|c| c.weight) {
+                    group.retain(|c| c.weight.total_cmp(&weight).is_eq());
+                }
+            } else {
+                group.truncate(usize::try_from(procedure.path_count).unwrap_or(usize::MAX));
+            }
+            candidates.extend(group.drain(..));
+        }
+        candidates.sort_by(|left, right| {
+            left.weight
+                .total_cmp(&right.weight)
+                .then_with(|| left.cost.total_cmp(&right.cost))
+                .then_with(|| left.edges.len().cmp(&right.edges.len()))
+                .then_with(|| left.nodes.cmp(&right.nodes))
+                .then_with(|| left.edges.cmp(&right.edges))
+        });
+        return;
+    }
     if procedure.path_count == 0 {
         if let Some(weight) = candidates.first().map(|candidate| candidate.weight) {
             candidates.retain(|candidate| candidate.weight.total_cmp(&weight).is_eq());
@@ -1680,5 +1709,38 @@ mod tests {
                 "path_count={path_count} target=5"
             );
         }
+    }
+
+    #[test]
+    fn single_source_zero_path_count_reaches_all_depths() {
+        let adjacency = BTreeMap::from([
+            (1, vec![edge(1, 2), edge(1, 3)]),
+            (2, vec![edge(2, 4)]),
+            (3, vec![edge(3, 4)]),
+            (4, vec![edge(4, 5)]),
+        ]);
+        let budget = QueryBudget::new(None, None);
+        let mut request = procedure(NativePathProcedureKind::SingleSource, None);
+        request.path_count = 0;
+        request.max_len = 5;
+
+        let mut candidates =
+            enumerate_unweighted_candidate_paths(&request, &adjacency, 100, &budget).unwrap();
+        for candidate in &mut candidates {
+            candidate.weight = candidate.edges.len() as f64;
+        }
+        select_native_paths(&request, &mut candidates);
+
+        let nodes = candidate_nodes(&candidates);
+        // Destination 2 (1 hop)
+        assert!(nodes.contains(&vec![1, 2]));
+        // Destination 3 (1 hop)
+        assert!(nodes.contains(&vec![1, 3]));
+        // Destination 4 (tied 2-hop shortest paths: 1->2->4 and 1->3->4)
+        assert!(nodes.contains(&vec![1, 2, 4]));
+        assert!(nodes.contains(&vec![1, 3, 4]));
+        // Destination 5 (3 hops: 1->2->4->5 and 1->3->4->5)
+        assert!(nodes.contains(&vec![1, 2, 4, 5]));
+        assert!(nodes.contains(&vec![1, 3, 4, 5]));
     }
 }
