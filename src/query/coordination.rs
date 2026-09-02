@@ -4470,16 +4470,12 @@ where
         QueryLifecycleFinish::Cancelled => Err(cancelled_query_error()),
         QueryLifecycleFinish::NotCancelled | QueryLifecycleFinish::NotOwned => result,
     };
-    match &result {
-        Ok(_) => runtime
+    if result.is_ok() {
+        runtime
             .metrics
             .requests_completed
-            .fetch_add(1, Ordering::Relaxed),
-        Err(_) => runtime
-            .metrics
-            .requests_failed
-            .fetch_add(1, Ordering::Relaxed),
-    };
+            .fetch_add(1, Ordering::Relaxed);
+    }
     result
 }
 
@@ -4953,5 +4949,28 @@ mod scope_grant_tests {
             &GraphScope::new(tenant, GraphId::new("other").unwrap()),
             QueryTransportAction::Read,
         ));
+    }
+
+    #[test]
+    fn transport_error_response_increments_requests_failed_once() {
+        let metrics = Arc::new(QueryTransportMetrics::default());
+        let runtime = QueryTransportServerRuntime {
+            config: QueryTransportServerConfig::default(),
+            metrics: metrics.clone(),
+            lifecycle: Arc::new(Mutex::new(QueryTransportLifecycle::default())),
+            request_gate: Arc::new(Semaphore::new(10)),
+            namespace_query_gates: BTreeMap::new(),
+            connection_gate: Arc::new(Semaphore::new(10)),
+            control_connection_gate: Arc::new(Semaphore::new(10)),
+        };
+
+        let err = GraphError::AdmissionRejected {
+            operation: "test",
+            actual: 10,
+            limit: 5,
+        };
+        let response = transport_error_response(&runtime, err);
+        assert!(matches!(response, QueryTransportResponse::Error { .. }));
+        assert_eq!(metrics.requests_failed.load(Ordering::Relaxed), 1);
     }
 }
