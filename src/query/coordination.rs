@@ -4969,6 +4969,7 @@ mod scope_grant_tests {
 
     #[test]
     fn merge_distributed_inner_join_drops_null_join_keys() {
+        // Case 1: right rows <= left rows (exercises right_by_key hash-table branch)
         let left_result = QueryResultSet::new(
             vec![QueryColumn::new("id"), QueryColumn::new("manager_id")],
             vec![
@@ -4993,6 +4994,36 @@ mod scope_grant_tests {
         let merged = merge_distributed_inner_join(&leg_results, &join).unwrap();
         assert_eq!(
             merged.rows,
+            vec![QueryRow::new(vec![
+                QueryValue::VertexId(1),
+                QueryValue::VertexId(10),
+                QueryValue::VertexId(10),
+            ])]
+        );
+
+        // Case 2: left rows < right rows (exercises left_by_key hash-table branch)
+        let left_result_small = QueryResultSet::new(
+            vec![QueryColumn::new("id"), QueryColumn::new("manager_id")],
+            vec![
+                QueryRow::new(vec![QueryValue::VertexId(1), QueryValue::VertexId(10)]),
+                QueryRow::new(vec![QueryValue::VertexId(2), QueryValue::Null]),
+            ],
+        );
+        let right_result_large = QueryResultSet::new(
+            vec![QueryColumn::new("id")],
+            vec![
+                QueryRow::new(vec![QueryValue::VertexId(10)]),
+                QueryRow::new(vec![QueryValue::Null]),
+                QueryRow::new(vec![QueryValue::Null]),
+            ],
+        );
+        let leg_results_rev = BTreeMap::from([
+            ("users".to_string(), left_result_small),
+            ("managers".to_string(), right_result_large),
+        ]);
+        let merged_rev = merge_distributed_inner_join(&leg_results_rev, &join).unwrap();
+        assert_eq!(
+            merged_rev.rows,
             vec![QueryRow::new(vec![
                 QueryValue::VertexId(1),
                 QueryValue::VertexId(10),
