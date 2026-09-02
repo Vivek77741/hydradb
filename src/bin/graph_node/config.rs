@@ -739,18 +739,39 @@ mod tests {
 
     #[test]
     fn read_auth_token_names_path_on_error() {
+        let auth_token_file = std::env::temp_dir().join(format!(
+            "hydradb-missing-auth-token-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
         let values = BTreeMap::from([
             ("GRAPH_ALLOW_PLAINTEXT".to_string(), "true".to_string()),
             (
                 "GRAPH_AUTH_TOKEN_FILE".to_string(),
-                "/nonexistent/path/to/auth-token".to_string(),
+                auth_token_file.display().to_string(),
             ),
         ]);
         let config = RuntimeConfig::from_values(values).unwrap();
         let err = config.read_auth_token().unwrap_err();
         assert!(
-            err.to_string().contains("/nonexistent/path/to/auth-token"),
+            err.to_string()
+                .contains(&auth_token_file.display().to_string()),
             "error should name the attempted path: {err}"
+        );
+
+        // Also verify when path is a directory (Issue #101 IsADirectory)
+        let dir = std::env::temp_dir();
+        let values_dir = BTreeMap::from([
+            ("GRAPH_ALLOW_PLAINTEXT".to_string(), "true".to_string()),
+            ("GRAPH_AUTH_TOKEN_FILE".to_string(), dir.display().to_string()),
+        ]);
+        let config_dir = RuntimeConfig::from_values(values_dir).unwrap();
+        let err_dir = config_dir.read_auth_token().unwrap_err();
+        assert!(
+            err_dir.to_string().contains(&dir.display().to_string()),
+            "error should name the directory path: {err_dir}"
         );
     }
 }
