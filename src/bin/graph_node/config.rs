@@ -317,11 +317,23 @@ impl RuntimeConfig {
     }
 
     pub fn read_auth_token(&self) -> ConfigResult<String> {
-        let token = std::fs::read_to_string(&self.auth_token_file)?
+        let token = std::fs::read_to_string(&self.auth_token_file)
+            .map_err(|err| {
+                Error::new(
+                    err.kind(),
+                    format!(
+                        "failed to read auth-token file {}: {err}",
+                        self.auth_token_file.display()
+                    ),
+                )
+            })?
             .trim()
             .to_string();
         if token.len() < 32 || token.eq_ignore_ascii_case("change-me") {
-            return invalid("graph auth token must contain at least 32 non-placeholder characters");
+            return invalid(format!(
+                "graph auth token in {} must contain at least 32 non-placeholder characters",
+                self.auth_token_file.display()
+            ));
         }
         Ok(token)
     }
@@ -723,5 +735,22 @@ mod tests {
         assert_eq!(memory.max_relationship_rows_bytes, 0);
         assert_eq!(memory.max_source_relationship_rows_bytes, 0);
         assert_eq!(memory.max_relationship_property_rows_bytes, 0);
+    }
+
+    #[test]
+    fn read_auth_token_names_path_on_error() {
+        let values = BTreeMap::from([
+            ("GRAPH_ALLOW_PLAINTEXT".to_string(), "true".to_string()),
+            (
+                "GRAPH_AUTH_TOKEN_FILE".to_string(),
+                "/nonexistent/path/to/auth-token".to_string(),
+            ),
+        ]);
+        let config = RuntimeConfig::from_values(values).unwrap();
+        let err = config.read_auth_token().unwrap_err();
+        assert!(
+            err.to_string().contains("/nonexistent/path/to/auth-token"),
+            "error should name the attempted path: {err}"
+        );
     }
 }
