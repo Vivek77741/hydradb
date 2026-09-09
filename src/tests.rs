@@ -13346,6 +13346,26 @@ async fn missing_property_predicate_three_valued_logic() {
         rows,
         QueryResultSet::new(vec![QueryColumn::new("id")], vec![])
     );
+
+    // 7. STARTS WITH on present non-string property:
+    // User 1: age is integer 30 -> n.age STARTS WITH '3' is false -> NOT (false) is true -> included!
+    // User 2: age is missing -> null -> NOT (null) is null -> excluded!
+    let rows = shard
+        .execute_cypher_rows(
+            QueryContext::new("reddit-home", "cypher-missing-prop-7"),
+            "MATCH (n:User) WHERE NOT (n.age STARTS WITH '3') RETURN n.id AS id",
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        rows,
+        QueryResultSet::new(
+            vec![QueryColumn::new("id")],
+            vec![QueryRow::new(vec![QueryValue::Property(
+                VertexPropertyValue::Integer(1)
+            )])],
+        )
+    );
 }
 
 #[cfg(feature = "opencypher")]

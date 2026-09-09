@@ -8106,7 +8106,8 @@ fn eval_row_predicate(row: &BindingRow, predicate: &RowPredicate) -> Result<TriB
                         TriBool::False
                     }
                 }
-                RowScalarValue::Value(_) | RowScalarValue::Missing => TriBool::Null,
+                RowScalarValue::Value(_) => TriBool::False,
+                RowScalarValue::Missing => TriBool::Null,
             }
         }
         RowPredicate::And(left, right) => {
@@ -9255,6 +9256,30 @@ mod tests {
         // NOT (n.name STARTS WITH 'A') -> NOT Null = Null -> not true
         let not_starts_with = RowPredicate::Not(Box::new(starts_with_pred));
         assert!(!row_predicate_matches(&row, &not_starts_with).unwrap());
+
+        // StartsWith on present non-string property -> False
+        let non_string_starts_with = RowPredicate::StartsWith {
+            expression: RowExpression::Property {
+                binding: "n".to_string(),
+                property: "age".to_string(),
+            },
+            prefix: "A".to_string(),
+        };
+        let mut row_with_age = BindingRow::from_node(&node, 1).unwrap();
+        let mut props = BTreeMap::new();
+        props.insert("age".to_string(), VertexPropertyValue::Integer(30));
+        row_with_age.metadata.insert(
+            "n".to_string(),
+            VertexMetadata {
+                labels: vec!["User".to_string()],
+                properties: props,
+            },
+        );
+        // Present integer property does not start with string -> False -> excluded
+        assert!(!row_predicate_matches(&row_with_age, &non_string_starts_with).unwrap());
+        // NOT (present integer STARTS WITH 'A') -> NOT False = True -> included
+        let not_non_string_starts_with = RowPredicate::Not(Box::new(non_string_starts_with));
+        assert!(row_predicate_matches(&row_with_age, &not_non_string_starts_with).unwrap());
 
         // Missing property in OR: (n.age = 30 OR n.id = 1) -> Null OR True = True
         let id_pred = RowPredicate::Compare {
