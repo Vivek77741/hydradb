@@ -1253,11 +1253,15 @@ fn enumerate_unweighted_candidate_paths(
 ) -> Result<Vec<CandidatePath>> {
     let mut queue = VecDeque::from([(vec![procedure.source], Vec::<PathEdge>::new())]);
     let mut candidates = Vec::new();
-    let mut minimum_depth = None;
+    let mut single_pair_min_depth = None;
+    let mut destination_min_depths = BTreeMap::<VertexId, usize>::new();
+    let mut destination_candidate_counts = BTreeMap::<VertexId, usize>::new();
+    let requested_per_dest = usize::try_from(procedure.path_count).unwrap_or(usize::MAX);
+
     while let Some((nodes, edges)) = queue.pop_front() {
         budget.check("native_path_breadth_first")?;
         if (procedure.kind == NativePathProcedureKind::SinglePair
-            && minimum_depth.is_some_and(|depth| edges.len() >= depth))
+            && single_pair_min_depth.is_some_and(|depth| edges.len() >= depth))
             || edges.len() >= usize::from(procedure.max_len)
         {
             continue;
@@ -1270,34 +1274,69 @@ fn enumerate_unweighted_candidate_paths(
             if nodes.contains(&next) {
                 continue;
             }
+            let depth = edges.len().saturating_add(1);
+
+            if procedure.kind == NativePathProcedureKind::SingleSource {
+                if let Some(&min_depth) = destination_min_depths.get(&next) {
+                    if depth > min_depth {
+                        continue;
+                    }
+                    if procedure.path_count > 0
+                        && destination_candidate_counts.get(&next).copied().unwrap_or(0)
+                            >= requested_per_dest
+                    {
+                        continue;
+                    }
+                } else {
+                    destination_min_depths.insert(next, depth);
+                }
+            }
+
             let mut next_nodes = nodes.clone();
             next_nodes.push(next);
             let mut next_edges = edges.clone();
             next_edges.push(edge.clone());
             let at_target = procedure.target.is_some_and(|target| target == next);
             if procedure.kind == NativePathProcedureKind::SingleSource || at_target {
-                if candidates.len() >= max_candidates {
-                    return Err(GraphError::AdmissionRejected {
-                        operation: "native_path_candidates",
-                        actual: candidates.len().saturating_add(1) as u64,
-                        limit: max_candidates as u64,
+                let should_record = if procedure.kind == NativePathProcedureKind::SingleSource {
+                    if procedure.path_count > 0 {
+                        destination_candidate_counts.get(&next).copied().unwrap_or(0)
+                            < requested_per_dest
+                    } else {
+                        destination_min_depths.get(&next).copied() == Some(depth)
+                    }
+                } else {
+                    true
+                };
+
+                if should_record {
+                    if candidates.len() >= max_candidates {
+                        return Err(GraphError::AdmissionRejected {
+                            operation: "native_path_candidates",
+                            actual: candidates.len().saturating_add(1) as u64,
+                            limit: max_candidates as u64,
+                        });
+                    }
+                    candidates.push(CandidatePath {
+                        nodes: next_nodes.clone(),
+                        edges: next_edges.clone(),
+                        weight: next_edges.len() as f64,
+                        cost: 0.0,
                     });
-                }
-                candidates.push(CandidatePath {
-                    nodes: next_nodes.clone(),
-                    edges: next_edges.clone(),
-                    weight: next_edges.len() as f64,
-                    cost: 0.0,
-                });
-                if procedure.path_count > 0
-                    && procedure.kind == NativePathProcedureKind::SinglePair
-                    && candidates.len()
-                        >= usize::try_from(procedure.path_count).unwrap_or(usize::MAX)
-                {
-                    return Ok(candidates);
-                }
-                if procedure.path_count == 0 && procedure.kind == NativePathProcedureKind::SinglePair {
-                    minimum_depth.get_or_insert(next_edges.len());
+                    if procedure.kind == NativePathProcedureKind::SingleSource {
+                        *destination_candidate_counts.entry(next).or_default() += 1;
+                    }
+                    if procedure.path_count > 0
+                        && procedure.kind == NativePathProcedureKind::SinglePair
+                        && candidates.len() >= requested_per_dest
+                    {
+                        return Ok(candidates);
+                    }
+                    if procedure.path_count == 0
+                        && procedure.kind == NativePathProcedureKind::SinglePair
+                    {
+                        single_pair_min_depth.get_or_insert(next_edges.len());
+                    }
                 }
             }
             if !(procedure.kind == NativePathProcedureKind::SinglePair && at_target) {
@@ -1742,5 +1781,42 @@ mod tests {
         // Destination 5 (3 hops: 1->2->4->5 and 1->3->4->5)
         assert!(nodes.contains(&vec![1, 2, 4, 5]));
         assert!(nodes.contains(&vec![1, 3, 4, 5]));
+    }
+
+    #[test]
+    fn single_source_dense_graph_prunes_longer_non_shortest_paths() {
+        // In a dense/clique-like graph, node 1 connects directly to 2, 3, 4.
+        // Node 2 also connects to 3 and 4, and node 3 connects to 4.
+        let adjacency = BTreeMap::from([
+            (1, vec![edge(1, 2), edge(1, 3), edge(1, 4)]),
+            (2, vec![edge(2, 3), edge(2, 4)]),
+            (3, vec![edge(3, 4)]),
+            (4, vec![]),
+        ]);
+        let budget = QueryBudget::new(None, None);
+        let mut request = procedure(NativePathProcedureKind::SingleSource, None);
+        request.path_count = 0;
+        request.max_len = 5;
+
+        let mut candidates =
+            enumerate_unweighted_candidate_paths(&request, &adjacency, 100, &budget).unwrap();
+        for candidate in &mut candidates {
+            candidate.weight = candidate.edges.len() as f64;
+        }
+        select_native_paths(&request, &mut candidates);
+
+        let nodes = candidate_nodes(&candidates);
+        // Direct 1-hop paths to 2, 3, 4 must be retained
+        assert!(nodes.contains(&vec![1, 2]));
+        assert!(nodes.contains(&vec![1, 3]));
+        assert!(nodes.contains(&vec![1, 4]));
+
+        // Longer non-shortest paths (e.g. 1->2->3, 1->2->4, 1->3->4, 1->2->3->4)
+        // must be pruned during traversal and not present
+        assert!(!nodes.contains(&vec![1, 2, 3]));
+        assert!(!nodes.contains(&vec![1, 2, 4]));
+        assert!(!nodes.contains(&vec![1, 3, 4]));
+        assert!(!nodes.contains(&vec![1, 2, 3, 4]));
+        assert_eq!(candidates.len(), 3);
     }
 }
