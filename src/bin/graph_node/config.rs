@@ -49,6 +49,7 @@ pub struct RuntimeConfig {
     pub auth_token_file: PathBuf,
     pub tls_certificate: Option<PathBuf>,
     pub tls_private_key: Option<PathBuf>,
+    pub metrics_auth_token: Option<String>,
     pub allow_plaintext: bool,
     pub max_concurrent_queries: usize,
     pub max_query_scan_edges: u64,
@@ -92,6 +93,7 @@ impl RuntimeConfig {
             return invalid("GRAPH_CELLS must contain GRAPH_CELL_ID");
         }
         let allow_plaintext = parse_bool(&values, "GRAPH_ALLOW_PLAINTEXT", false)?;
+        let metrics_auth_token = values.get("GRAPH_METRICS_AUTH_TOKEN").cloned();
         let tls_certificate = optional_path(&values, "GRAPH_TLS_CERTIFICATE");
         let tls_private_key = optional_path(&values, "GRAPH_TLS_PRIVATE_KEY");
         if !allow_plaintext && (tls_certificate.is_none() || tls_private_key.is_none()) {
@@ -235,6 +237,7 @@ impl RuntimeConfig {
             )),
             tls_certificate,
             tls_private_key,
+            metrics_auth_token,
             allow_plaintext,
             max_concurrent_queries: parse_usize(&values, "GRAPH_MAX_CONCURRENT_QUERIES", 256)?,
             max_query_scan_edges: parse_u64(&values, "GRAPH_MAX_QUERY_SCAN_EDGES", 1_000_000)?,

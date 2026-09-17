@@ -280,6 +280,7 @@ async fn run_node(
         ready.clone(),
         service.clone(),
         Arc::clone(&node),
+        config.metrics_auth_token.clone(),
     )
     .await?;
     ready.mark_ready();

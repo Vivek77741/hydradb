@@ -15,6 +15,7 @@ use slatedb_graph_kernel::{
 use tokio::net::TcpListener;
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
+use sha2::{Digest, Sha256};
 
 use crate::otel_metrics::{CounterSource, ExportUnit, FieldSource};
 use crate::readiness::NodeReadiness;
@@ -569,6 +570,7 @@ struct AdminState {
     ready: NodeReadiness,
     query: ClientQueryService,
     routed_node: Arc<ScopedRoutedGraphCluster>,
+    metrics_auth_token: Option<String>,
 }
 
 pub struct AdminServer {
@@ -583,6 +585,7 @@ impl AdminServer {
         ready: NodeReadiness,
         query: ClientQueryService,
         node: Arc<ScopedRoutedGraphCluster>,
+        metrics_auth_token: Option<String>,
     ) -> Result<Self> {
         let listener = TcpListener::bind(addr).await.map_err(admin_io_error)?;
         let local_addr = listener.local_addr().map_err(admin_io_error)?;
@@ -590,6 +593,7 @@ impl AdminServer {
             ready,
             query,
             routed_node: node,
+            metrics_auth_token,
         };
         Self::serve(listener, local_addr, state)
     }
@@ -654,7 +658,17 @@ async fn readiness(State(state): State<AdminState>) -> StatusCode {
     }
 }
 
-async fn metrics(State(state): State<AdminState>) -> Response {
+async fn metrics(State(state): State<AdminState>, headers: axum::http::HeaderMap) -> Response {
+    if let Some(expected_token) = &state.metrics_auth_token {
+        let is_valid = headers
+            .get(axum::http::header::AUTHORIZATION)
+            .and_then(|value| value.to_str().ok())
+            .map(|h| h == format!("Bearer {}", expected_token))
+            .unwrap_or(false);
+        if !is_valid {
+            return StatusCode::UNAUTHORIZED.into_response();
+        }
+    }
     let mut output = format!(
         "# TYPE graph_runtime_ready gauge\ngraph_runtime_ready {}\n",
         u8::from(state.ready.is_ready()),
@@ -727,7 +741,9 @@ fn append_node_metrics(output: &mut String, shard_metrics: &[ScopedGraphShardRun
         GraphOperationalMetricsSnapshot::default().histogram_fields(),
     );
     for metrics in shard_metrics {
-        let scope = metrics.scope.to_string();
+        let mut hasher = Sha256::new();
+        hasher.update(metrics.scope.to_string().as_bytes());
+        let scope = format!("{:x}", hasher.finalize());
         let metrics = &metrics.shard;
         let scoped = render_labels(&[("scope", &scope), ("cell_id", &metrics.cell_id)], None);
         for (field, value) in metrics.operational.counter_fields() {
