@@ -1686,11 +1686,11 @@ fn retry_exhaustion_snapshot_expired_and_unknown_shard_reach_bolt_clients() {
     });
     match retry_exhausted {
         BoltError::Query { code, message } => {
-            assert_eq!(code, "Neo.TransientError.Transaction.LockClientStopped");
+            assert_eq!(code, "Neo.TransientError.Transaction.DeadlockDetected");
             assert!(message.contains("vertex-insert"));
             assert!(message.contains("10"));
         }
-        other => panic!("expected a transient lock conflict Bolt error, got {other:?}"),
+        other => panic!("expected a transient deadlock Bolt error, got {other:?}"),
     }
 
     let unknown_shard = graph_error_to_bolt(GraphError::UnknownShard {
@@ -1712,10 +1712,10 @@ fn retry_exhaustion_snapshot_expired_and_unknown_shard_reach_bolt_clients() {
     });
     match snapshot_expired {
         BoltError::Query { code, message } => {
-            assert_eq!(code, "Neo.TransientError.Transaction.BookmarkTimeout");
+            assert_eq!(code, "Neo.ClientError.Transaction.InvalidBookmark");
             assert!(message.contains("compacted watermark"));
         }
-        other => panic!("expected a bookmark timeout Bolt error, got {other:?}"),
+        other => panic!("expected an invalid bookmark Bolt error, got {other:?}"),
     }
 }
 

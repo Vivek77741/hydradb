@@ -225,9 +225,12 @@ pub(super) fn graph_error_to_bolt(error: GraphError) -> BoltError {
     match error {
         GraphError::GraphScopeAccessDenied { .. } => BoltError::Forbidden(error.to_string()),
         GraphError::AdmissionRejected { .. } => BoltError::ResourceExhausted(error.to_string()),
-        GraphError::SnapshotAhead { .. }
-        | GraphError::SnapshotExpired { .. } => BoltError::Query {
+        GraphError::SnapshotAhead { .. } => BoltError::Query {
             code: "Neo.TransientError.Transaction.BookmarkTimeout".to_string(),
+            message: error.to_string(),
+        },
+        GraphError::SnapshotExpired { .. } => BoltError::Query {
+            code: "Neo.ClientError.Transaction.InvalidBookmark".to_string(),
             message: error.to_string(),
         },
         GraphError::InvalidKeyComponent { .. }
@@ -246,7 +249,7 @@ pub(super) fn graph_error_to_bolt(error: GraphError) -> BoltError {
             message: error.to_string(),
         },
         GraphError::RetryExhausted { .. } => BoltError::Query {
-            code: "Neo.TransientError.Transaction.LockClientStopped".to_string(),
+            code: "Neo.TransientError.Transaction.DeadlockDetected".to_string(),
             message: error.to_string(),
         },
         GraphError::UnknownShard { .. } => BoltError::Query {
