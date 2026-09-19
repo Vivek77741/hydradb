@@ -225,7 +225,8 @@ pub(super) fn graph_error_to_bolt(error: GraphError) -> BoltError {
     match error {
         GraphError::GraphScopeAccessDenied { .. } => BoltError::Forbidden(error.to_string()),
         GraphError::AdmissionRejected { .. } => BoltError::ResourceExhausted(error.to_string()),
-        GraphError::SnapshotAhead { .. } => BoltError::Query {
+        GraphError::SnapshotAhead { .. }
+        | GraphError::SnapshotExpired { .. } => BoltError::Query {
             code: "Neo.TransientError.Transaction.BookmarkTimeout".to_string(),
             message: error.to_string(),
         },
@@ -242,6 +243,14 @@ pub(super) fn graph_error_to_bolt(error: GraphError) -> BoltError {
         },
         GraphError::IdempotencyConflict { .. } => BoltError::Query {
             code: "Neo.ClientError.Transaction.Invalid".to_string(),
+            message: error.to_string(),
+        },
+        GraphError::RetryExhausted { .. } => BoltError::Query {
+            code: "Neo.TransientError.Transaction.LockClientStopped".to_string(),
+            message: error.to_string(),
+        },
+        GraphError::UnknownShard { .. } => BoltError::Query {
+            code: "Neo.ClientError.Database.DatabaseNotFound".to_string(),
             message: error.to_string(),
         },
         // Touch point (c). Drivers already know this code: discard the routing
