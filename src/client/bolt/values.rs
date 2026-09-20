@@ -229,6 +229,10 @@ pub(super) fn graph_error_to_bolt(error: GraphError) -> BoltError {
             code: "Neo.TransientError.Transaction.BookmarkTimeout".to_string(),
             message: error.to_string(),
         },
+        GraphError::GraphScopeMismatch { .. } => BoltError::Query {
+            code: "Neo.ClientError.Transaction.InvalidBookmark".to_string(),
+            message: error.to_string(),
+        },
         GraphError::InvalidKeyComponent { .. }
         | GraphError::MissingQueryParameter { .. }
         | GraphError::QueryParse { .. }
@@ -242,6 +246,11 @@ pub(super) fn graph_error_to_bolt(error: GraphError) -> BoltError {
         },
         GraphError::IdempotencyConflict { .. } => BoltError::Query {
             code: "Neo.ClientError.Transaction.Invalid".to_string(),
+            message: error.to_string(),
+        },
+        GraphError::UnsafeDurabilityConfig { .. }
+        | GraphError::RoutedWriterConfigMismatch { .. } => BoltError::Query {
+            code: "Neo.ClientError.Configuration.ConfigurationError".to_string(),
             message: error.to_string(),
         },
         // Touch point (c). Drivers already know this code: discard the routing

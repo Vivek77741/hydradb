@@ -425,6 +425,14 @@ impl HttpApiError {
                 owner: None,
                 authenticate: false,
             },
+            GraphError::UnsafeDurabilityConfig { .. }
+            | GraphError::RoutedWriterConfigMismatch { .. } => Self {
+                status: StatusCode::BAD_REQUEST,
+                code: "invalid_configuration",
+                message: error.to_string(),
+                owner: None,
+                authenticate: false,
+            },
             _ => {
                 tracing::warn!(target: "slatedb_graph_kernel", error = %error, "HTTP suppressed internal graph error");
                 Self {
