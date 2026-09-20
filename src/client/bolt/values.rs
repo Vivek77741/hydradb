@@ -250,7 +250,7 @@ pub(super) fn graph_error_to_bolt(error: GraphError) -> BoltError {
         },
         GraphError::UnsafeDurabilityConfig { .. }
         | GraphError::RoutedWriterConfigMismatch { .. } => BoltError::Query {
-            code: "Neo.ClientError.Configuration.ConfigurationError".to_string(),
+            code: "Neo.DatabaseError.General.ConfigurationError".to_string(),
             message: error.to_string(),
         },
         // Touch point (c). Drivers already know this code: discard the routing

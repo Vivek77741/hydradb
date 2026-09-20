@@ -427,8 +427,8 @@ impl HttpApiError {
             },
             GraphError::UnsafeDurabilityConfig { .. }
             | GraphError::RoutedWriterConfigMismatch { .. } => Self {
-                status: StatusCode::BAD_REQUEST,
-                code: "invalid_configuration",
+                status: StatusCode::INTERNAL_SERVER_ERROR,
+                code: "configuration_error",
                 message: error.to_string(),
                 owner: None,
                 authenticate: false,

@@ -1701,7 +1701,7 @@ fn configuration_errors_reach_bolt_clients_as_configuration_error() {
     });
     match unsafe_durability {
         BoltError::Query { code, message } => {
-            assert_eq!(code, "Neo.ClientError.Configuration.ConfigurationError");
+            assert_eq!(code, "Neo.DatabaseError.General.ConfigurationError");
             assert!(message.contains("await_durable_writes"));
         }
         other => panic!("expected ConfigurationError, got {other:?}"),
@@ -1715,7 +1715,7 @@ fn configuration_errors_reach_bolt_clients_as_configuration_error() {
     });
     match routed_mismatch {
         BoltError::Query { code, message } => {
-            assert_eq!(code, "Neo.ClientError.Configuration.ConfigurationError");
+            assert_eq!(code, "Neo.DatabaseError.General.ConfigurationError");
             assert!(message.contains("routed writer configuration mismatch"));
         }
         other => panic!("expected ConfigurationError, got {other:?}"),

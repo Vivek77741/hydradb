@@ -172,13 +172,13 @@ fn a_routing_refusal_is_a_503_and_not_an_internal_error() {
 }
 
 #[test]
-fn configuration_errors_return_bad_request_and_not_internal_errors() {
+fn configuration_errors_return_internal_server_error_with_details() {
     let unsafe_durability = HttpApiError::from_graph(GraphError::UnsafeDurabilityConfig {
         operation: "write",
         reason: "node requires await_durable_writes".to_string(),
     });
-    assert_eq!(unsafe_durability.status, StatusCode::BAD_REQUEST);
-    assert_eq!(unsafe_durability.code, "invalid_configuration");
+    assert_eq!(unsafe_durability.status, StatusCode::INTERNAL_SERVER_ERROR);
+    assert_eq!(unsafe_durability.code, "configuration_error");
     assert!(unsafe_durability.message.contains("await_durable_writes"));
 
     let routed_mismatch = HttpApiError::from_graph(GraphError::RoutedWriterConfigMismatch {
@@ -187,8 +187,8 @@ fn configuration_errors_return_bad_request_and_not_internal_errors() {
         existing: std::time::Duration::from_millis(500),
         requested: std::time::Duration::from_millis(1000),
     });
-    assert_eq!(routed_mismatch.status, StatusCode::BAD_REQUEST);
-    assert_eq!(routed_mismatch.code, "invalid_configuration");
+    assert_eq!(routed_mismatch.status, StatusCode::INTERNAL_SERVER_ERROR);
+    assert_eq!(routed_mismatch.code, "configuration_error");
     assert!(routed_mismatch.message.contains("routed writer configuration mismatch"));
 }
 
