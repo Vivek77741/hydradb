@@ -179,7 +179,7 @@ fn configuration_errors_return_internal_server_error_with_details() {
     });
     assert_eq!(unsafe_durability.status, StatusCode::INTERNAL_SERVER_ERROR);
     assert_eq!(unsafe_durability.code, "configuration_error");
-    assert!(unsafe_durability.message.contains("await_durable_writes"));
+    assert_eq!(unsafe_durability.message, "internal graph configuration error");
 
     let routed_mismatch = HttpApiError::from_graph(GraphError::RoutedWriterConfigMismatch {
         path: "store/cell-0".to_string(),
@@ -189,7 +189,7 @@ fn configuration_errors_return_internal_server_error_with_details() {
     });
     assert_eq!(routed_mismatch.status, StatusCode::INTERNAL_SERVER_ERROR);
     assert_eq!(routed_mismatch.code, "configuration_error");
-    assert!(routed_mismatch.message.contains("routed writer configuration mismatch"));
+    assert_eq!(routed_mismatch.message, "internal graph configuration error");
 }
 
 #[tokio::test]

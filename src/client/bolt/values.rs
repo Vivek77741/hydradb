@@ -231,7 +231,7 @@ pub(super) fn graph_error_to_bolt(error: GraphError) -> BoltError {
         },
         GraphError::GraphScopeMismatch { .. } => BoltError::Query {
             code: "Neo.ClientError.Transaction.InvalidBookmark".to_string(),
-            message: error.to_string(),
+            message: "bookmark belongs to another graph scope or cell".to_string(),
         },
         GraphError::InvalidKeyComponent { .. }
         | GraphError::MissingQueryParameter { .. }
@@ -249,9 +249,12 @@ pub(super) fn graph_error_to_bolt(error: GraphError) -> BoltError {
             message: error.to_string(),
         },
         GraphError::UnsafeDurabilityConfig { .. }
-        | GraphError::RoutedWriterConfigMismatch { .. } => BoltError::Query {
-            code: "Neo.DatabaseError.General.ConfigurationError".to_string(),
-            message: error.to_string(),
+        | GraphError::RoutedWriterConfigMismatch { .. } => {
+            tracing::warn!(target: "slatedb_graph_kernel", error = %error, "Bolt configuration error");
+            BoltError::Query {
+                code: "Neo.DatabaseError.General.ConfigurationError".to_string(),
+                message: "internal graph configuration error".to_string(),
+            }
         },
         // Touch point (c). Drivers already know this code: discard the routing
         // table, re-route, retry. Without it a refused write arrives as an

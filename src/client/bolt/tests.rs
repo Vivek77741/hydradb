@@ -1687,7 +1687,7 @@ fn graph_scope_mismatch_reaches_bolt_clients_as_invalid_bookmark() {
     match error {
         BoltError::Query { code, message } => {
             assert_eq!(code, "Neo.ClientError.Transaction.InvalidBookmark");
-            assert!(message.contains("graph scope mismatch"));
+            assert_eq!(message, "bookmark belongs to another graph scope or cell");
         }
         other => panic!("expected InvalidBookmark, got {other:?}"),
     }
@@ -1702,7 +1702,7 @@ fn configuration_errors_reach_bolt_clients_as_configuration_error() {
     match unsafe_durability {
         BoltError::Query { code, message } => {
             assert_eq!(code, "Neo.DatabaseError.General.ConfigurationError");
-            assert!(message.contains("await_durable_writes"));
+            assert_eq!(message, "internal graph configuration error");
         }
         other => panic!("expected ConfigurationError, got {other:?}"),
     }
@@ -1716,7 +1716,7 @@ fn configuration_errors_reach_bolt_clients_as_configuration_error() {
     match routed_mismatch {
         BoltError::Query { code, message } => {
             assert_eq!(code, "Neo.DatabaseError.General.ConfigurationError");
-            assert!(message.contains("routed writer configuration mismatch"));
+            assert_eq!(message, "internal graph configuration error");
         }
         other => panic!("expected ConfigurationError, got {other:?}"),
     }
