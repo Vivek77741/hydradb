@@ -97,7 +97,7 @@ Projections are `<binding>.<property>` or an aggregate. `RETURN *` is not
 executable, so name what you want.
 
 Aggregates: `count`, `sum`, `avg`, `collect`. `count(*)` is supported.
-Numeric scalar functions can also be evaluated inside aggregate arguments (e.g. `collect(abs(s.delta))`).
+Numeric scalar functions can also be evaluated inside aggregate arguments for `collect` and `count` (e.g. `collect(abs(s.delta))`, `count(round(s.temp))`). `sum` and `avg` require direct integer properties or literals.
 `DISTINCT` inside an aggregate argument is not, and neither is `count(DISTINCT *)`.
 
 `ORDER BY` accepts a projected alias, `<binding>.id`, or `count(*)`, ascending

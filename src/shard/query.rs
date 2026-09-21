@@ -9379,14 +9379,107 @@ mod tests {
             RowScalarValue::Missing
         );
 
-        // expression_query_value
+        // expression_query_value for all scalar functions
+        assert_eq!(
+            expression_query_value(&row, &expr_abs_pos).unwrap(),
+            Some(QueryValue::Property(VertexPropertyValue::Integer(10)))
+        );
         assert_eq!(
             expression_query_value(&row, &expr_abs_neg).unwrap(),
             Some(QueryValue::Property(VertexPropertyValue::Integer(15)))
         );
         assert_eq!(
+            expression_query_value(&row, &expr_abs_float).unwrap(),
+            Some(QueryValue::Property(VertexPropertyValue::Float(QueryFloat(3.7))))
+        );
+        assert_eq!(
+            expression_query_value(&row, &expr_ceil).unwrap(),
+            Some(QueryValue::Property(VertexPropertyValue::Float(QueryFloat((-3.7_f64).ceil()))))
+        );
+        assert_eq!(
+            expression_query_value(&row, &expr_floor).unwrap(),
+            Some(QueryValue::Property(VertexPropertyValue::Float(QueryFloat((-3.7_f64).floor()))))
+        );
+        assert_eq!(
+            expression_query_value(&row, &expr_round).unwrap(),
+            Some(QueryValue::Property(VertexPropertyValue::Float(QueryFloat((-3.7_f64).round()))))
+        );
+        assert_eq!(
+            expression_query_value(&row, &expr_sign_pos).unwrap(),
+            Some(QueryValue::Property(VertexPropertyValue::Integer(1)))
+        );
+        assert_eq!(
+            expression_query_value(&row, &expr_sign_neg).unwrap(),
+            Some(QueryValue::Property(VertexPropertyValue::SignedInteger(-1)))
+        );
+        assert_eq!(
+            expression_query_value(&row, &expr_sign_zero).unwrap(),
+            Some(QueryValue::Property(VertexPropertyValue::Integer(0)))
+        );
+        assert_eq!(
             expression_query_value(&row, &expr_abs_missing).unwrap(),
             None
+        );
+        assert_eq!(
+            expression_query_value(&row, &expr_abs_text).unwrap(),
+            None
+        );
+        let expr_ceil_missing = RowExpression::Ceil(Box::new(RowExpression::Property {
+            binding: "n".to_string(),
+            property: "missing".to_string(),
+        }));
+        assert_eq!(
+            expression_query_value(&row, &expr_ceil_missing).unwrap(),
+            None
+        );
+        let expr_floor_missing = RowExpression::Floor(Box::new(RowExpression::Property {
+            binding: "n".to_string(),
+            property: "missing".to_string(),
+        }));
+        assert_eq!(
+            expression_query_value(&row, &expr_floor_missing).unwrap(),
+            None
+        );
+        let expr_round_missing = RowExpression::Round(Box::new(RowExpression::Property {
+            binding: "n".to_string(),
+            property: "missing".to_string(),
+        }));
+        assert_eq!(
+            expression_query_value(&row, &expr_round_missing).unwrap(),
+            None
+        );
+        let expr_sign_missing = RowExpression::Sign(Box::new(RowExpression::Property {
+            binding: "n".to_string(),
+            property: "missing".to_string(),
+        }));
+        assert_eq!(
+            expression_query_value(&row, &expr_sign_missing).unwrap(),
+            None
+        );
+
+        // Aggregate accumulation with numeric functions
+        let mut collect_acc = AggregateAccumulator::Collect(Vec::new());
+        let collect_proj = RowProjection::Aggregate {
+            function: RowAggregateFunction::Collect,
+            expression: expr_ceil.clone(),
+        };
+        update_aggregate_projection(&mut collect_acc, &collect_proj, &row).unwrap();
+        assert_eq!(
+            finalize_aggregate(&collect_acc).unwrap(),
+            QueryValue::List(vec![QueryValue::Property(VertexPropertyValue::Float(
+                QueryFloat((-3.7_f64).ceil())
+            ))])
+        );
+
+        let mut count_acc = AggregateAccumulator::CountExpression(0);
+        let count_proj = RowProjection::Aggregate {
+            function: RowAggregateFunction::Count,
+            expression: expr_round.clone(),
+        };
+        update_aggregate_projection(&mut count_acc, &count_proj, &row).unwrap();
+        assert_eq!(
+            finalize_aggregate(&count_acc).unwrap(),
+            QueryValue::Count(1)
         );
 
         // Predicate matching
@@ -9396,5 +9489,30 @@ mod tests {
             right: RowExpression::Literal(VertexPropertyValue::Integer(15)),
         };
         assert!(row_predicate_matches(&row, &pred_abs).unwrap());
+        let pred_ceil = RowPredicate::Compare {
+            left: expr_ceil,
+            op: RowComparisonOp::Eq,
+            right: RowExpression::Literal(VertexPropertyValue::Float(QueryFloat(-3.0))),
+        };
+        assert!(row_predicate_matches(&row, &pred_ceil).unwrap());
+        let pred_floor = RowPredicate::Compare {
+            left: expr_floor,
+            op: RowComparisonOp::Eq,
+            right: RowExpression::Literal(VertexPropertyValue::Float(QueryFloat(-4.0))),
+        };
+        assert!(row_predicate_matches(&row, &pred_floor).unwrap());
+        let pred_round = RowPredicate::Compare {
+            left: expr_round,
+            op: RowComparisonOp::Eq,
+            right: RowExpression::Literal(VertexPropertyValue::Float(QueryFloat(-4.0))),
+        };
+        assert!(row_predicate_matches(&row, &pred_round).unwrap());
+        let pred_sign = RowPredicate::Compare {
+            left: expr_sign_neg,
+            op: RowComparisonOp::Eq,
+            right: RowExpression::Literal(VertexPropertyValue::SignedInteger(-1)),
+        };
+        assert!(row_predicate_matches(&row, &pred_sign).unwrap());
     }
 }
+

@@ -2927,6 +2927,21 @@ fn lower_row_aggregate_expression(
         }
         let argument = checked_node(sys::cypher_ast_apply_operator_get_argument(expression, 0))?;
         let expression = lower_row_expression(argument, parameters)?;
+        if matches!(function, RowAggregateFunction::Sum | RowAggregateFunction::Avg)
+            && matches!(
+                expression,
+                RowExpression::Abs(_)
+                    | RowExpression::Ceil(_)
+                    | RowExpression::Floor(_)
+                    | RowExpression::Round(_)
+                    | RowExpression::Sign(_)
+            )
+        {
+            return unsupported(format!(
+                "{} aggregate currently requires a direct property or integer literal; numeric functions are supported under collect and count",
+                aggregate_function_name(function)
+            ));
+        }
         let fallback_name = format!(
             "{}({})",
             aggregate_function_name(function),
@@ -4731,5 +4746,16 @@ mod tests {
                 })
             ))
         );
+
+        // collect and count accept numeric functions
+        let collect_parsed = parse_opencypher_row_query(
+            "MATCH (n:Item) RETURN collect(abs(n.delta)) AS deltas, count(round(n.temp)) AS cnt",
+        )
+        .unwrap();
+        assert_eq!(collect_parsed.projections.len(), 2);
+
+        // sum and avg reject numeric functions with clear message
+        assert!(parse_opencypher_row_query("MATCH (n:Item) RETURN sum(abs(n.delta))").is_err());
+        assert!(parse_opencypher_row_query("MATCH (n:Item) RETURN avg(round(n.temp))").is_err());
     }
 }
